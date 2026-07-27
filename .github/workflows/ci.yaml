@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      # The office pipeline shells out to soffice, and a converter without
+      # fonts renders boxes; the office tests skip when this is missing rather
+      # than fail, which is exactly what CI must not let happen silently.
+      - name: Install LibreOffice
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            fonts-dejavu-core \
+            fonts-liberation \
+            libreoffice-calc-nogui \
+            libreoffice-impress-nogui \
+            libreoffice-writer-nogui
+      # The office tests skip when soffice is missing, so the install has to be
+      # held to producing it or CI would go green having rendered nothing.
+      - run: command -v soffice && soffice --version
+      - run: go build ./...
+      - run: go vet ./...
+      - run: go test ./... -count=1
+      # The end-to-end suite builds the binary and serves it for real. Its
+      # versitygw round trip skips when the runner cannot run containers.
+      - run: make e2e
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - uses: golangci/golangci-lint-action@v9
+        with:
+          # Pinned: .golangci.yaml is a v2 config verified against this
+          # release, and `latest` would let CI break with no change here.
+          version: v2.12.2
+
+  proto:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # buf breaking resolves its baseline out of the local clone, which a
+          # shallow checkout does not carry.
+          fetch-depth: 0
+      - uses: bufbuild/buf-setup-action@v1
+      - run: buf lint
+        working-directory: api
+      # Mirrors the Makefile's proto-breaking target, which needs a committed
+      # api/ on the default branch: the first push of the schema has nothing to
+      # compare against. The baseline is named origin/main rather than the
+      # Makefile's local main, which a checked-out workflow does not have.
+      - run: buf breaking --against '../.git#ref=origin/main,subdir=api'
+        working-directory: api
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      # Build only — this workflow publishes nothing.
+      - run: docker build --tag gahaku:${{ github.sha }} .

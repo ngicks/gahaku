@@ -1,0 +1,61 @@
+# The S3-compatible object storage callers presign against. gahaku itself never
+# reads this unit's credentials: it only ever receives urls a caller already
+# signed (D-09).
+
+[Unit]
+Description=versitygw S3 gateway
+
+[Container]
+# Pinned rather than :latest so a restart cannot swap the gateway underneath a
+# running deployment. v1.7.0 is what deployment/test and e2e/ were verified
+# against.
+Image=docker.io/versity/versitygw:v1.7.0
+
+# Also the name gahaku resolves on gahaku.network. Without it the container
+# would be `systemd-versitygw`, and a presigned url signed for host `versitygw`
+# would reach nothing.
+ContainerName=versitygw
+
+Network=gahaku.network
+Volume=versitygw.volume:/data
+
+# Unprivileged, so a rootless service user can bind it (D-12). Published on
+# every interface because the callers that presign live off-host; restrict it
+# to `127.0.0.1:7070:7070` when a reverse proxy fronts the gateway instead.
+PublishPort=7070:7070
+
+# The root credentials, as ROOT_ACCESS_KEY_ID / ROOT_SECRET_ACCESS_KEY. Kept
+# out of the unit so the unit itself stays committable — see README.md, which
+# also gives the `Secret=` form for deployments that would rather hold them in
+# podman's secret store. No `-` prefix: a gateway that came up without root
+# credentials would be a worse outcome than a unit that refuses to start.
+EnvironmentFile=%h/.config/gahaku/versitygw.env
+
+# Off by default; the path is served on the S3 port as a plain unauthenticated
+# GET, which is what makes it usable from HealthCmd below.
+Environment=VGW_HEALTH=/health
+
+# wget is busybox's, present in the image. The check reports health only — the
+# unit deliberately does not carry `Notify=healthy`, which would make systemd's
+# readiness depend on podman's healthcheck timers; an unhealthy gateway is then
+# visible in `podman ps` without a failed timer being able to fail the boot.
+HealthCmd=wget --quiet --output-document=/dev/null http://127.0.0.1:7070/health
+HealthInterval=10s
+HealthTimeout=3s
+HealthRetries=3
+HealthStartPeriod=5s
+
+# Positional, not a flag: the posix backend takes its top-level directory as an
+# argument, and the image's entrypoint execs whatever the container is given.
+Exec=posix /data
+
+[Service]
+Restart=always
+
+# The first start pulls the image, which systemd's 90s default does not cover
+# on a slow link — and a start that times out here leaves the deployment with a
+# failed unit rather than a slow one.
+TimeoutStartSec=300
+
+[Install]
+WantedBy=default.target

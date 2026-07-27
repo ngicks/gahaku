@@ -1,0 +1,32 @@
+# The build stage copies the module graph and the Go source explicitly, so this
+# is the second half of that: whatever a wildcard COPY would otherwise pull in
+# stays out of the context the daemon uploads.
+
+.git
+.gitignore
+.dockerignore
+Dockerfile
+
+# Agent tooling and its dependency directory, which go.mod ignores as well.
+.agents
+.claude
+.codex
+.github
+apm_modules
+AGENTS.md
+CLAUDE.md
+apm.lock.yaml
+apm.yml
+
+# Not part of a build.
+doc
+deployment
+e2e
+LICENSE
+Makefile
+.golangci.yaml
+
+# Build leftovers.
+bin
+*.test
+*.out

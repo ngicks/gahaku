@@ -1,0 +1,14 @@
+# The network gahaku and versitygw share. Nothing else needs to join it: the
+# only traffic on it is gahaku fetching from and uploading to the gateway
+# through presigned urls whose host is the gateway's container name.
+#
+# A [Unit] section is mandatory in this stack even when it carries nothing but
+# a description — the quadlet generator emits the [Unit] section of a generated
+# .service only when the source unit has one, and the Requires=/After= edges it
+# derives (a container onto this network, onto versitygw.volume) live there.
+
+[Unit]
+Description=Podman network the gahaku stack talks over
+
+[Network]
+NetworkName=gahaku

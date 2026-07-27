@@ -1,0 +1,41 @@
+# The render service. It is deliberately not ordered after versitygw.service:
+# gahaku holds no storage credentials and never contacts the gateway until a
+# request hands it a presigned url, so a gateway that is still starting costs
+# nothing here.
+
+[Unit]
+Description=gahaku document rendering gRPC service
+
+[Container]
+# Not published anywhere: build it from the repository's Dockerfile with
+# `podman build --tag gahaku:latest .` (README.md). The localhost/ prefix is
+# what keeps a missing build a loud "image not known" rather than a pull
+# attempt against docker.io.
+Image=localhost/gahaku:latest
+
+ContainerName=gahaku
+Network=gahaku.network
+PublishPort=9000:9000
+
+# Configured through the environment rather than Exec= arguments: the binary
+# layers defaults < file < environment < flags, and Environment= lines are what
+# a systemd drop-in can override without rewriting the unit.
+Environment=GAHAKU_LISTEN=:9000
+
+# Both of these relax an input guard, and both are what makes the co-located
+# versitygw usable at all: the gateway speaks plain http on a podman network,
+# whose addresses are RFC1918. Undo them — and terminate TLS in front of the
+# gateway — for any deployment whose callers are not trusted to choose the urls
+# gahaku fetches; see README.md.
+Environment=GAHAKU_INPUT_ALLOW_HTTP=true
+Environment=GAHAKU_INPUT_BLOCK_PRIVATE_ADDRESSES=false
+
+# Has to outlive the slowest render, since it is the deadline a worker
+# subprocess is killed on. Office conversions pay soffice's startup.
+Environment=GAHAKU_WORKER_TIMEOUT=2m
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=default.target

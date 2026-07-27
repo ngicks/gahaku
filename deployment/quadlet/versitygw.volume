@@ -1,0 +1,10 @@
+# The posix backend's top-level directory. versitygw treats each subdirectory
+# of it as a bucket and each file below one as an object, so this volume is the
+# whole object store — it outlives the container and must not be recreated
+# between restarts.
+
+[Unit]
+Description=Backing store of the versitygw object storage
+
+[Volume]
+VolumeName=versitygw-data

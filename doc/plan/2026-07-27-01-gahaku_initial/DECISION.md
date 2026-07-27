@@ -188,6 +188,63 @@ it resolves.
   harness slot in the user's tree is `deployment/test/` (the tree listed
   only top levels).
 
+## Implementation-time decisions (2026-07-28)
+
+### D-14: Worker error frames carry a machine-readable error class
+
+- **Choice**: the stdout result frame's error is a `worker.JobError{Code,
+  Message, Details, Stderr}`; `worker.Handle` takes a `Classifier` hook, and
+  `pkg/render/workererr` owns the bidirectional class table (`Classify` on
+  the worker side, `Restore` in `pkg/server` before status mapping).
+- **Rationale**: without it every worker-reported render error (corrupt
+  input, page range out of range, soffice missing) crossed the stdio
+  boundary as a bare string and surfaced as INTERNAL; with it subprocess
+  failures map to the same gRPC codes and proto details as in-process ones.
+- **Rejected**: pkg/worker importing render error types directly (import
+  cycle; worker stays proto- and render-agnostic); exit-code-based
+  classification (too coarse, no structured detail fields).
+
+### D-15: Gateway credentials come from an EnvironmentFile, not a podman secret
+
+- **Choice**: `versitygw.container` reads
+  `EnvironmentFile=%h/.config/gahaku/versitygw.env` (podman `--env-file`), with
+  the `Secret=type=env` form documented as the alternative.
+- **Rationale**: podman's default secret driver stores secrets in plaintext
+  under the same user's storage anyway, so a `0600` file is no weaker and is
+  strictly simpler: no out-of-band podman state to create before the first
+  start, nothing `podman system reset` can silently take away, and one path
+  that resolves to the service user's home rootless and to `/root` under the
+  system manager the harness runs.
+- **Rejected**: `Secret=` as the default (units depend on state that is not in
+  a file the rest of the configuration is backed up with); credentials inline
+  in the unit (uncommittable).
+
+### D-16: The units carry a healthcheck but not `Notify=healthy`
+
+- **Choice**: `Environment=VGW_HEALTH=/health` plus `HealthCmd=` using the
+  image's busybox wget; `Notify` left at podman's default.
+- **Rationale**: `--health` and the wget binary were both read off the v1.7.0
+  image, so the check is real. `Notify=healthy` would additionally make
+  systemd's readiness depend on podman's healthcheck timer units, which cannot
+  be exercised in this dev environment — a timer that fails to arm would turn
+  every start into a `TimeoutStartSec` expiry instead of an unhealthy
+  container. Readiness is asserted by the harness over HTTP instead.
+- **Rejected**: `Notify=healthy` (untestable failure mode, fail-closed); no
+  healthcheck at all (loses the one readiness signal versitygw exposes).
+
+### D-17: The harness converges versitygw only; gahaku.service is asserted generated
+
+- **Choice**: `deployment/test/` waits for `versitygw.service` and does the
+  presigned round trip; for `gahaku.service` it asserts the generator produced
+  the unit and logs whatever state it reached.
+- **Rationale**: PLAN.md scopes the harness to exactly that, and the
+  alternatives — building the LibreOffice-bearing image inside the throwaway
+  container, or streaming a host-built one into the inner podman — cost minutes
+  per run for a container the round trip never touches.
+- **Rejected**: requiring `gahaku.service` active (turns a deployment-unit test
+  into an image-build test); omitting `gahaku.container` from the harness
+  entirely (its syntax would then go unchecked).
+
 ## Routine calls (noted, not user-decided)
 
 - Content sniffing uses `github.com/gabriel-vasile/mimetype` (broad

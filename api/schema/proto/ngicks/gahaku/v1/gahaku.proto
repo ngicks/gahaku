@@ -1,0 +1,186 @@
+syntax = "proto3";
+
+package ngicks.gahaku.v1;
+
+option go_package = "github.com/ngicks/gahaku/api/gen/proto/go/ngicks/gahaku/v1;gahakuv1";
+
+// GahakuService renders input documents into raster images.
+//
+// All four RPCs share one wire protocol: the client sends a single
+// RenderRequest carrying a header, then — only when the input is delivered as
+// a direct byte stream — a sequence of chunk messages, then half-closes. The
+// server streams rendered pages back, either as bytes or as per-page upload
+// completions, depending on the header's output spec.
+//
+// Render sniffs the input's content type and routes it. RenderImage,
+// RenderPdf and RenderOffice assert the kind instead of sniffing and reject
+// mismatching input with INVALID_ARGUMENT.
+service GahakuService {
+  rpc Render(stream RenderRequest) returns (stream RenderResponse) {}
+  rpc RenderImage(stream RenderRequest) returns (stream RenderResponse) {}
+  rpc RenderPdf(stream RenderRequest) returns (stream RenderResponse) {}
+  rpc RenderOffice(stream RenderRequest) returns (stream RenderResponse) {}
+}
+
+// RenderRequest is the client-to-server frame of every render stream.
+//
+// The first message MUST set header. Every subsequent message MUST set chunk,
+// and only a Source.byte_stream input may send any: URI-sourced inputs send
+// the header alone and half-close.
+message RenderRequest {
+  oneof payload {
+    RenderRequestHeader header = 1;
+    // A slice of the input document, in order. The cumulative size is capped
+    // by the server; exceeding it aborts the stream with RESOURCE_EXHAUSTED
+    // and an InputSizeLimitExceeded detail before any worker is spawned.
+    bytes chunk = 2;
+  }
+}
+
+// RenderRequestHeader opens a render stream: where the input comes from,
+// where the output goes, and how to rasterize.
+message RenderRequestHeader {
+  Source source = 1;
+  OutputSpec output = 2;
+  RenderOptions options = 3;
+}
+
+// Source selects how the input document reaches the server.
+//
+// The service holds no object-storage credentials: callers presign against
+// their own store and gahaku performs a plain HTTP GET.
+message Source {
+  oneof kind {
+    ByteStreamSource byte_stream = 1;
+    // Presigned HTTP(S) GET URL. Plain http:// is rejected unless the server
+    // is configured to allow it.
+    string presigned_get_url = 2;
+    // Path to a file on the server's filesystem. Accepted only under a
+    // configured allowlisted root; with no root configured, local input is
+    // disabled and this fails with PERMISSION_DENIED.
+    string local_path = 3;
+  }
+}
+
+// ByteStreamSource marks the input as arriving in this stream's subsequent
+// RenderRequest.chunk messages.
+message ByteStreamSource {}
+
+// OutputSpec selects how rendered pages are returned.
+message OutputSpec {
+  oneof kind {
+    ByteStreamOutput byte_stream = 1;
+    PresignedPutOutput presigned_put = 2;
+  }
+}
+
+// ByteStreamOutput streams pages back as PageChunk messages.
+message ByteStreamOutput {}
+
+// PresignedPutOutput has the server upload each page instead of returning its
+// bytes, reporting progress as PageUploaded messages.
+message PresignedPutOutput {
+  // Presigned HTTP(S) PUT URLs, one per page of the requested page range in
+  // order. A count that does not equal the page-range length fails with
+  // INVALID_ARGUMENT and an OutputUrlCountMismatch detail.
+  //
+  // Presign generously: a URL must stay valid across queue wait plus render
+  // time. Upload rejections map to FAILED_PRECONDITION.
+  repeated string urls = 1;
+}
+
+// RenderOptions describes the raster to produce.
+message RenderOptions {
+  ImageFormat format = 1;
+  // Bounds the output. Unset leaves the rendered size untouched.
+  ResizeSpec resize = 2;
+  // Rasterization density for page-based inputs (PDF, Office). Ignored for
+  // image inputs. 0 selects the server default.
+  uint32 dpi = 3;
+  // Pages to render. Unset means the whole document. Image inputs are
+  // single-page and accept only a range covering page 1.
+  PageRange pages = 4;
+}
+
+// ImageFormat is the encoding of the rendered pages.
+enum ImageFormat {
+  IMAGE_FORMAT_UNSPECIFIED = 0;
+  IMAGE_FORMAT_PNG = 1;
+  IMAGE_FORMAT_JPEG = 2;
+  IMAGE_FORMAT_GIF = 3;
+  IMAGE_FORMAT_TIFF = 4;
+  IMAGE_FORMAT_BMP = 5;
+  IMAGE_FORMAT_WEBP = 6;
+  IMAGE_FORMAT_AVIF = 7;
+}
+
+// ResizeSpec bounds the output in pixels, preserving aspect ratio. Pages
+// already within the bounds are left at their rendered size; pages are never
+// scaled up. 0 leaves that axis unbounded.
+message ResizeSpec {
+  uint32 max_width = 1;
+  uint32 max_height = 2;
+}
+
+// PageRange is an inclusive, 1-based range of document pages.
+message PageRange {
+  // 0 means the first page.
+  uint32 first_page = 1;
+  // 0 means the last page of the document.
+  uint32 last_page = 2;
+}
+
+// RenderResponse is the server-to-client frame of every render stream.
+//
+// Which payload appears is fixed by the request's OutputSpec: byte_stream
+// output yields PageChunk messages, presigned_put output yields PageUploaded
+// messages.
+message RenderResponse {
+  oneof payload {
+    PageChunk page_chunk = 1;
+    PageUploaded page_uploaded = 2;
+  }
+}
+
+// PageChunk carries a slice of one rendered page.
+//
+// Chunks of a page arrive in order and contiguously; the page ends at the
+// chunk with last set. Pages themselves arrive in page-range order.
+message PageChunk {
+  // 0-based position within the requested page range, so the document page
+  // number is PageRange.first_page + page_index.
+  uint32 page_index = 1;
+  bytes chunk = 2;
+  bool last = 3;
+}
+
+// PageUploaded reports that a page finished uploading to its presigned PUT
+// URL.
+message PageUploaded {
+  // 0-based position within the requested page range, which is also the index
+  // into PresignedPutOutput.urls.
+  uint32 page_index = 1;
+  uint64 size_bytes = 2;
+}
+
+// InputSizeLimitExceeded details a RESOURCE_EXHAUSTED status: the streamed
+// input outgrew the server's cumulative limit.
+message InputSizeLimitExceeded {
+  uint64 limit_bytes = 1;
+  uint64 received_bytes = 2;
+}
+
+// PageRangeOutOfRange details an OUT_OF_RANGE status: the document has fewer
+// pages than the requested range.
+message PageRangeOutOfRange {
+  uint32 first_page = 1;
+  uint32 last_page = 2;
+  uint32 page_count = 3;
+}
+
+// OutputUrlCountMismatch details an INVALID_ARGUMENT status: the presigned
+// PUT URL count does not match the requested page-range length.
+message OutputUrlCountMismatch {
+  uint32 url_count = 1;
+  uint32 page_count = 2;
+}

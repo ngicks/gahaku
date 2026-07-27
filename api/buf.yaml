@@ -1,0 +1,17 @@
+version: v2
+modules:
+  - path: schema/proto
+lint:
+  use:
+    - STANDARD
+  except:
+    # The four RPCs are one protocol with an asserted-vs-sniffed input kind,
+    # so they share RenderRequest/RenderResponse. Per-RPC message pairs would
+    # be four identical copies and would force four copies of the server
+    # handler as well.
+    - RPC_REQUEST_RESPONSE_UNIQUE
+    - RPC_REQUEST_STANDARD_NAME
+    - RPC_RESPONSE_STANDARD_NAME
+breaking:
+  use:
+    - FILE
