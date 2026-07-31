@@ -10,8 +10,8 @@ import (
 	"io"
 	"text/template"
 
+	"github.com/ngicks/gahaku/gahaku"
 	"github.com/ngicks/gahaku/internal/templateutil"
-	"github.com/ngicks/gahaku/pkg/gahaku"
 )
 
 // TemplateFuncHelp returns the aligned help block for the helper functions

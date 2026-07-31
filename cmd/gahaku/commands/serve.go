@@ -6,7 +6,7 @@ import (
 	"github.com/ngicks/go-common/contextkey"
 	"github.com/spf13/cobra"
 
-	"github.com/ngicks/gahaku/pkg/gahaku"
+	"github.com/ngicks/gahaku/gahaku"
 )
 
 // serveFlags holds what `serve` binds, so the run function can tell which of

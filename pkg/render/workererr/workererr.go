@@ -49,7 +49,7 @@ type details struct {
 // failure no class covers — a worker that broke rather than a document it
 // refused, which stays an opaque *worker.ExitError and an INTERNAL status.
 //
-// It is a worker.Classifier: pkg/gahaku hands it to worker.Handle.
+// It is a worker.Classifier: the gahaku package hands it to worker.Handle.
 func Classify(err error) *worker.JobError {
 	if _, ok := errors.AsType[*render.DecodeError](err); ok {
 		return classOf(CodeDecode, err, details{})

@@ -5,8 +5,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/ngicks/gahaku/pkg/gahaku"
-	"github.com/ngicks/gahaku/pkg/gahaku/cli"
+	"github.com/ngicks/gahaku/gahaku"
+	"github.com/ngicks/gahaku/gahaku/cli"
 )
 
 // configLongFmt documents the resolved-config shape so users can write --format
@@ -27,8 +27,8 @@ nesting is shown as a tree so deep configs stay readable:
   ├─ .TempDir          string    # job directory parent  (temp_dir)
   ├─ .Soffice          string    # LibreOffice binary    (soffice)
   ├─ .Input                      # input policy          (input)
-  │   ├─ .MaxStreamBytes         int       # streamed input cap
-  │   ├─ .MaxFetchBytes          int       # presigned GET cap
+  │   ├─ .MaxStreamBytes         int64     # streamed input cap
+  │   ├─ .MaxFetchBytes          int64     # presigned GET cap
   │   ├─ .LocalRoots             []string  # allowed local roots
   │   ├─ .AllowHttp              bool      # accept plain http urls
   │   └─ .BlockPrivateAddresses  bool      # refuse internal addresses
@@ -78,7 +78,7 @@ func runConfig(cmd *cobra.Command, _ []string, flagConfig, flagFormat string) er
 	if err != nil {
 		return err
 	}
-	// Presentation (JSON / template rendering) lives in pkg/gahaku/cli; ./cmd
+	// Presentation (JSON / template rendering) lives in gahaku/cli; ./cmd
 	// only wires it to stdout. cmd.Println would route to stderr.
 	return cli.RenderConfig(cmd.OutOrStdout(), cfg, flagFormat)
 }

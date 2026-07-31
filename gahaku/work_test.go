@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/ngicks/gahaku/pkg/gahaku"
+	"github.com/ngicks/gahaku/gahaku"
 	"github.com/ngicks/gahaku/pkg/render/workererr"
 	"github.com/ngicks/gahaku/pkg/worker"
 )

@@ -3,7 +3,7 @@ package commands
 import (
 	"github.com/spf13/cobra"
 
-	"github.com/ngicks/gahaku/pkg/gahaku"
+	"github.com/ngicks/gahaku/gahaku"
 	"github.com/ngicks/gahaku/pkg/worker"
 )
 

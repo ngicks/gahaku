@@ -3,8 +3,8 @@ package commands
 import (
 	"github.com/spf13/cobra"
 
+	"github.com/ngicks/gahaku/internal/libver"
 	"github.com/ngicks/gahaku/internal/versioninfo"
-	"github.com/ngicks/gahaku/pkg/gahaku"
 )
 
 func versionCmd(parent *cobra.Command) {
@@ -19,7 +19,7 @@ func versionCmd(parent *cobra.Command) {
 }
 
 func runVersion(cmd *cobra.Command, _ []string) error {
-	info := versioninfo.ReadVersionInfo(gahaku.Version)
+	info := versioninfo.ReadVersionInfo(libver.Version)
 	cmd.Printf("version:     %s\n", info.Version)
 	if info.Commit != "" {
 		modified := ""

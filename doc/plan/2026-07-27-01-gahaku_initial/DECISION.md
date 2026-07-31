@@ -245,6 +245,19 @@ it resolves.
   into an image-build test); omitting `gahaku.container` from the harness
   entirely (its syntax would then go unchecked).
 
+### D-18: CLI rescaffolded to the updated go-edit-cobra canonical layout (2026-07-28)
+
+- **Choice** (user-requested rescaffold): service/composition package moved
+  `pkg/gahaku/` → top-level `./gahaku/`; version constant moved to the fixed
+  `internal/libver/libver.go`; vendored `internal/cmd/release/` removed in
+  favor of the external `bump-libver` tool; `commands/version.go` now imports
+  libver + versioninfo instead of the service package.
+- **Rationale**: the updated skill makes `pkg/` a legacy placement and stops
+  vendoring release code; a user-requested rescaffold is the skill's explicit
+  migration trigger.
+- **Scope note**: the domain packages `pkg/{input,output,worker,render,sniff,
+  server}` are outside the skill's domain and stay under `pkg/`.
+
 ## Routine calls (noted, not user-decided)
 
 - Content sniffing uses `github.com/gabriel-vasile/mimetype` (broad

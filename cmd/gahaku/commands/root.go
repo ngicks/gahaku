@@ -1,6 +1,6 @@
 // Package commands is the gahaku command tree: it parses flags, layers them
-// over the configuration pkg/gahaku loads, and hands the result to the service.
-// Nothing here computes.
+// over the configuration the gahaku package loads, and hands the result to the
+// service. Nothing here computes.
 package commands
 
 import (
