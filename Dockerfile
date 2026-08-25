@@ -47,6 +47,11 @@ FROM docker.io/library/debian:bookworm-slim
 # Latin-only). Emoji are their own font because they are colour, not an outline
 # any text family provides.
 #
+# Both stages read these. LibreOffice resolves them through fontconfig and
+# embeds what it used into the PDF it exports; the pdf stage mounts /usr/share
+# into the pdfium wasm sandbox (pkg/render/pdfjob) so a PDF that names a font
+# without embedding it — CJK documents above all — still finds glyphs here.
+#
 # ca-certificates is what makes an https presigned url verifiable.
 RUN apt-get update \
 	&& apt-get install --yes --no-install-recommends \
@@ -62,6 +67,23 @@ RUN apt-get update \
 		libreoffice-impress-nogui \
 		libreoffice-writer-nogui \
 	&& rm -rf /var/lib/apt/lists/*
+
+# Which of Noto CJK's four regional faces a document gets is decided by the
+# locale of the soffice process, not by anything in the document: the same file
+# naming SimSun and MS Mincho comes out in the sc faces under LANG=zh_CN and
+# the jp faces under LANG=ja_JP, and with no locale set at all it lands on sc
+# or hk. Han unification is why that matters — every face carries the whole
+# repertoire, so nothing goes missing either way, but a few hundred unified
+# ideographs (直 骨 令 门) are drawn in the wrong regional shape.
+#
+# This rule fixes the answer at Japanese without setting a process locale.
+# Rejecting the sibling faces is what does the work: pattern rules alone do not
+# reach the fallback list LibreOffice builds for itself, and rejecting costs no
+# coverage because the jp face draws simplified and traditional Chinese too.
+# The aliases below it are for documents that name a Windows Japanese font,
+# which is most of them, and they are what keeps mincho serif and gothic sans
+# instead of collapsing both onto one face.
+COPY deployment/fontconfig/59-gahaku-prefer-ja.conf /etc/fonts/conf.d/
 
 # /usr/bin/soffice comes from libreoffice-common, which the -nogui packages
 # depend on rather than ship. The office pipeline looks the binary up on PATH

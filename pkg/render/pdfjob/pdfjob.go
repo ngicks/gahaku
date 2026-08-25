@@ -33,6 +33,10 @@ const (
 	// twice screen resolution, which keeps text legible when the page is
 	// viewed at full width without doubling the pixels again at 300.
 	defaultDpi = 150
+	// fontParentDir is mounted into the pdfium sandbox so the font mapper's
+	// scan of /usr/share/fonts finds the image's fonts (D-C). The parent
+	// rather than the fonts directory itself: see the FSConfig comment below.
+	fontParentDir = "/usr/share"
 	// defaultFormat is what a request without one gets. A page render is
 	// flat-shaded text and line art, which png keeps sharp and lossless
 	// while jpeg would ring around every glyph.
@@ -59,10 +63,28 @@ var pool = sync.OnceValues(func() (pdfium.Pool, error) {
 		// concurrent caller waits for it rather than compiling its own.
 		MaxIdle:  1,
 		MaxTotal: 1,
-		// The document reaches pdfium through a reader, so the module never
-		// opens a path and the default config's mount of / into the sandbox
-		// would only be reachable surface for nothing.
-		FSConfig: wazero.NewFSConfig(),
+		// The document reaches pdfium through a reader, so the only paths the
+		// module opens are its font mapper's: the wasm build is a linux build
+		// and scans /usr/share/fonts for something to draw an unembedded font
+		// with. That scan is why a PDF that names its fonts instead of
+		// embedding them — CJK documents above all — needs this mount; without
+		// it such text silently rasterizes blank.
+		//
+		// The mount is the parent directory, and that is load-bearing.
+		// pdfium's walker stats every entry readdir hands it and treats the
+		// first failed stat as the end of the directory
+		// (core/fxcrt/fx_folder_posix.cpp), and wazero answers a stat of ".."
+		// at a mount root with EPERM because it would escape the sandbox.
+		// Mounted at /usr/share/fonts the scan therefore dies on its second
+		// entry, having read nothing; mounted at /usr/share, the ".." of
+		// fonts/ resolves inside the sandbox and the scan reaches the font
+		// files. Verified by WASI syscall trace and by pixels either way.
+		//
+		// Read-only, because pdfium has no reason to write and the wasm
+		// module's WASI imports include the unlink family. Not opting for the
+		// library's nil-FSConfig default, which mounts / read-write.
+		FSConfig: wazero.NewFSConfig().
+			WithReadOnlyDirMount(fontParentDir, fontParentDir),
 		// stdout is where the worker leaves its result frame, and pkg/worker
 		// keeps only the tail of it: a document that made pdfium write enough
 		// there could push the frame out of what the orchestrator captured.
