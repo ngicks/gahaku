@@ -18,9 +18,10 @@ CLAUDE.md
 apm.lock.yaml
 apm.yml
 
-# Not part of a build.
+# Not part of a build, except the fontconfig rule the runtime stage copies in.
 doc
 deployment
+!deployment/fontconfig
 e2e
 LICENSE
 Makefile
