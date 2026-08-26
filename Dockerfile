@@ -12,6 +12,7 @@ RUN go mod download
 
 COPY api ./api
 COPY cmd ./cmd
+COPY gahaku ./gahaku
 COPY internal ./internal
 COPY pkg ./pkg
 
